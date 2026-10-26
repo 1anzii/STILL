@@ -1,0 +1,19 @@
+Michroma Regular
+PostScript name: Michroma-Regular (read from the bundled font with CoreText).
+
+Downloaded from the official Google Fonts repository on 2026-10-26.
+Both the font and license are included without modification.
+
+Font source:
+https://raw.githubusercontent.com/google/fonts/main/ofl/michroma/Michroma-Regular.ttf
+SHA256: b62301163788bc5b7f8fcac0b74b184e34e1827e577b499ecb724da065098f87
+
+License source:
+https://raw.githubusercontent.com/google/fonts/main/ofl/michroma/OFL.txt
+SHA256: 33c39ce59a45bfb0dae3280e98bdb46be59d6d68efc62d4dc5fae90a26d2f393
+
+License: SIL Open Font License, Version 1.1 (see OFL.txt).
+Font copyright: 2011 The Michroma Project Authors.
+
+The font is registered only for the running application/tool process; it is
+not installed in the user's or system's font collection.
