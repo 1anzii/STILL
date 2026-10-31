@@ -16,6 +16,7 @@ final class SleepModel: ObservableObject {
     @Published private(set) var remaining = ""
     @Published private(set) var battery = BatteryReading()
     @Published private(set) var notice: String?
+    @Published private(set) var brightnessStatus: String?
     @Published var error: String?
     @Published var duration = UserDefaults.standard.object(forKey: "duration") as? Int ?? 3600 {
         didSet { UserDefaults.standard.set(duration, forKey: "duration") }
@@ -24,12 +25,25 @@ final class SleepModel: ObservableObject {
         didSet { UserDefaults.standard.set(acOnly, forKey: "acOnly") }
     }
     @Published private(set) var loginEnabled = false
+    @Published var dimWhenLidClosed = UserDefaults.standard.object(forKey: "dimWhenLidClosed") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(dimWhenLidClosed, forKey: "dimWhenLidClosed")
+            refreshBrightness()
+        }
+    }
 
     var didChange: (() -> Void)?
     private var sessionID: String?
     private var timer: Timer?
     private var activity: NSObjectProtocol?
     private var renewLease = false
+    private let brightnessBackend = SystemLidBrightnessBackend()
+    private lazy var brightnessController = LidBrightnessController(
+        backend: brightnessBackend,
+        recoveryURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("LidKeeper/brightness-recovery.json"))
+    private var brightnessTimer: Timer?
+    private var preparingToExit = false
 
     var externallyDisabled: Bool { systemDisabled == true && !isAwake && !busy && !recovering }
     var title: String {
@@ -59,6 +73,35 @@ final class SleepModel: ObservableObject {
             Task { @MainActor in self?.tick() }
         }
         if let timer { RunLoop.main.add(timer, forMode: .common) }
+        brightnessBackend.startObserving { [weak self] in
+            Task { @MainActor [weak self] in self?.refreshBrightness() }
+        }
+        // The notification handles lid transitions promptly. Polling also
+        // retries after display reconfiguration or a missed wake notification.
+        brightnessTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshBrightness() }
+        }
+        if let brightnessTimer { RunLoop.main.add(brightnessTimer, forMode: .common) }
+        refreshBrightness()
+    }
+
+    func refreshBrightness() {
+        guard !preparingToExit else { return }
+        brightnessController.refresh(enabled: dimWhenLidClosed)
+        if brightnessStatus != brightnessController.statusText {
+            brightnessStatus = brightnessController.statusText
+        }
+    }
+
+    func prepareBrightnessForExit() {
+        preparingToExit = true
+        brightnessController.restoreBeforeExit()
+        brightnessStatus = brightnessController.statusText
+    }
+
+    func cancelBrightnessExit() {
+        preparingToExit = false
+        refreshBrightness()
     }
 
     func tick() {
@@ -192,7 +235,7 @@ final class SleepModel: ObservableObject {
             if let state = PowerClient.status(), state.isFresh, state.lastRequestID == id { return state }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
-        throw ClientError.message("电源服务响应超时。请稍后重试。")
+        throw ClientError.message("电源服务响应超时。请在“使用说明与关于”中点击“安装或更新电源服务…”，完成后重试。")
     }
 
     private func endActivity() {
@@ -250,10 +293,8 @@ final class SleepModel: ObservableObject {
 
     func quit() {
         guard !busy else { return }
-        Task {
-            if sessionID != nil, !(await stop()) { return }
-            NSApp.terminate(nil)
-        }
+        // The delegate restores brightness before ending the keep-awake lease.
+        NSApp.terminate(nil)
     }
 
     var hasSession: Bool { sessionID != nil }

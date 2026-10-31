@@ -351,6 +351,8 @@ struct PanelView: View {
             Menu {
                 Text(model.powerDescription)
                 Toggle("仅接电源时运行", isOn: $model.acOnly).disabled(!canAdjustDial)
+                Toggle("合盖时调暗内置屏幕", isOn: $model.dimWhenLidClosed)
+                if let status = model.brightnessStatus { Text(status) }
                 Toggle("登录时启动", isOn: Binding(get: { model.loginEnabled }, set: model.setLoginEnabled))
                 Divider()
                 Button("使用说明与关于…", action: showHelp)
@@ -629,7 +631,7 @@ struct HelpView: View {
                     Image(nsImage: NSApplication.shared.applicationIconImage).resizable().frame(width: 64, height: 64)
                     VStack(alignment: .leading, spacing: 4) {
                         BrandWordmark(size: 27, tracking: 2, finish: .brass)
-                        Text("版本 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.9.4")")
+                        Text("版本 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.10.0")")
                             .font(.system(size: 12)).foregroundStyle(ManualFinish.muted)
                     }
                 }
@@ -656,6 +658,10 @@ struct HelpView: View {
                 DisclosureGroup("设置与保护") {
                     VStack(alignment: .leading, spacing: 14) {
                         section("电源与启动", text: "默认仅接电源运行，拔电会恢复休眠；关闭此项可用电池，不设最低电量限制。登录时启动不会自动开启运行。")
+                        section("合盖调暗", text: "默认调低内置屏幕亮度，开盖恢复；不主动熄屏，不调整外屏。可在齿轮菜单关闭。若系统不支持，或屏幕暂不可用，将显示提示。")
+                        if let status = model.brightnessStatus {
+                            Text(status).font(.system(size: 11)).foregroundStyle(ManualFinish.yellow)
+                        }
                         section("状态与保护", text: "红 O 关闭，绿 I 开启；黄灯表示处理中或需检查。到时、退出、失联、读电源失败或温度过高时，后台会尝试恢复休眠，以界面状态为准。")
                         section("休眠范围", text: "RUN 暂停整机休眠；SLEEP 恢复 macOS 正常规则，并非立即睡着。外接显示器或其他程序仍可能保持唤醒。")
                     }
@@ -671,6 +677,10 @@ struct HelpView: View {
                 }
                 DisclosureGroup("故障恢复与卸载") {
                     VStack(alignment: .leading, spacing: 14) {
+                        if model.helperReady {
+                            Button("安装或更新电源服务…") { model.prepareHelper() }
+                                .disabled(model.busy || model.hasSession || model.recovering || model.systemDisabled != false)
+                        }
                         section("无法恢复休眠", text: "保持应用打开，按状态提示处理。仍失败时可在终端执行下列命令；需管理员密码，也会影响其他防休眠工具。")
                         HStack {
                             Text("sudo pmset -a disablesleep 0").font(.system(size: 11, design: .monospaced)).textSelection(.enabled)

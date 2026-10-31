@@ -11,6 +11,7 @@ command -v python3 >/dev/null 2>&1 || fail '需要 Python 3 生成兼容 UTF-8 �
 
 files=(
     README.md LICENSE THIRD_PARTY_NOTICES.md PUBLISHING.md .gitignore
+    docs/DEVELOPMENT.md docs/images/still-overview.png
     Sources/PowerHelper/PROTOCOL.md
     Resources/Info.plist Resources/AppIcon.png Resources/AppIcon.icns Resources/安装说明.txt
     Resources/Fonts/Michroma-Regular.ttf Resources/Fonts/OFL.txt Resources/Fonts/SOURCE.txt

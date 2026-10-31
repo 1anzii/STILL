@@ -58,7 +58,7 @@ struct HelperTests {
         return (controller, value, power, store)
     }
     static func main() throws {
-        expect(HelperStatus().helperVersion == "1.1.0", "status identifies helper without battery cutoff")
+        expect(HelperStatus().helperVersion == "1.1.1", "status identifies helper with bounded command resources")
         do {
             let (c, r, p, s) = try start()
             expect(p.disabled && s.record != nil && c.status.enabled, "enable owns persistent record")
@@ -203,7 +203,61 @@ struct HelperTests {
         expect(SystemPowerBackend.parseSleepDisabled("nothing") == nil, "missing value stays unknown in parser")
         try schemaCompatibilityTests()
         try fileTests()
+        try commandResourceTests()
         print("Helper tests passed: \(checks) checks; no privileged commands executed.")
+    }
+
+    /// Inspect this test process only. No root service or power setting is changed.
+    static func descriptorCount() throws -> Int {
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        let needed = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, nil, 0)
+        guard needed > 0 else { throw HelperError.system("Cannot inspect test-process file descriptors") }
+        var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(needed) / stride + 32)
+        let bytes = descriptors.withUnsafeMutableBytes { buffer in
+            proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, buffer.baseAddress, Int32(buffer.count))
+        }
+        guard bytes > 0, Int(bytes) < descriptors.count * stride else {
+            throw HelperError.system("Cannot enumerate test-process file descriptors")
+        }
+        return Int(bytes) / stride
+    }
+
+    static func commandResourceTests() throws {
+        // Warm up Foundation's process machinery before measuring. Do not put
+        // this loop in a test-side autoreleasepool: that would hide the old leak.
+        for _ in 0..<3 { _ = try FixedCommand.run("/usr/bin/pmset", ["-g"]) }
+        let beforeReads = try descriptorCount()
+        for _ in 0..<40 { _ = try FixedCommand.run("/usr/bin/pmset", ["-g"]) }
+        let afterReads = try descriptorCount()
+        expect(afterReads <= beforeReads + 1,
+               "40 read-only commands keep FD count bounded (\(beforeReads) -> \(afterReads))")
+
+        // Querying a nonexistent launchd job is read-only and returns a failure.
+        let absentJob = "system/com.yeonza.LidKeeper.tests.absent.\(UUID().uuidString)"
+        let beforeFailures = try descriptorCount()
+        var failures = 0
+        for _ in 0..<20 {
+            do { _ = try FixedCommand.run("/bin/launchctl", ["print", absentJob]) }
+            catch is CommandFailure { failures += 1 }
+        }
+        let afterFailures = try descriptorCount()
+        expect(failures == 20, "read-only nonexistent-job queries exercise command failures")
+        expect(afterFailures <= beforeFailures + 1,
+               "failed commands close pipes (\(beforeFailures) -> \(afterFailures))")
+
+        // pslog is a read-only continuous monitor, so the timeout is guaranteed
+        // without a test-only executable or permission to mutate power settings.
+        let beforeTimeouts = try descriptorCount()
+        var timeouts = 0
+        for _ in 0..<4 {
+            do { _ = try FixedCommand.run("/usr/bin/pmset", ["-g", "pslog"], timeout: 0.05) }
+            catch HelperError.system(let message) where message == "系统电源命令超时。" { timeouts += 1 }
+        }
+        let afterTimeouts = try descriptorCount()
+        expect(timeouts == 4, "read-only continuous monitors exercise timeout cleanup")
+        expect(afterTimeouts <= beforeTimeouts + 1,
+               "timed-out commands close pipes (\(beforeTimeouts) -> \(afterTimeouts))")
+        print("Command FD checks: reads \(beforeReads)->\(afterReads), failures \(beforeFailures)->\(afterFailures), timeouts \(beforeTimeouts)->\(afterTimeouts).")
     }
 
     static func schemaCompatibilityTests() throws {

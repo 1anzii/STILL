@@ -51,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.panel.dismiss() }
+            Task { @MainActor [weak self] in
+                self?.panel.dismiss()
+                self?.model.refreshBrightness()
+            }
         }
         model.didChange = { [weak self] in self?.updateStatus() }
         updateStatus()
@@ -77,11 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
         if model.busy { return .terminateCancel }
+        model.prepareBrightnessForExit()
         guard model.hasSession else { return .terminateNow }
         guard !stoppingForTermination else { return .terminateLater }
         stoppingForTermination = true
         Task {
             let stopped = await model.stop()
+            if !stopped { model.cancelBrightnessExit() }
             stoppingForTermination = false
             sender.reply(toApplicationShouldTerminate: stopped)
         }

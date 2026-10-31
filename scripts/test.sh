@@ -10,12 +10,19 @@ export CLANG_MODULE_CACHE_PATH="$BUILD/module-cache"
 export SWIFT_MODULECACHE_PATH="$BUILD/module-cache"
 
 # New files avoid stale executable/signature caches after recompilation on macOS.
-rm -f "$BUILD/tests/app-tests" "$BUILD/tests/helper-tests"
+rm -f "$BUILD/tests/app-tests" "$BUILD/tests/helper-tests" "$BUILD/tests/brightness-tests"
 xcrun swiftc -swift-version 5 -Onone -parse-as-library -module-cache-path "$BUILD/module-cache" \
     "$ROOT/Sources/LidKeeper/PowerClient.swift" "$ROOT/Tests/AppTests/AppClientTests.swift" \
     -o "$BUILD/tests/app-tests" -framework Foundation -framework AppKit -framework IOKit
 codesign --force --sign - "$BUILD/tests/app-tests"
 "$BUILD/tests/app-tests"
+
+xcrun swiftc -swift-version 5 -Onone -parse-as-library -module-cache-path "$BUILD/module-cache" \
+    "$ROOT/Sources/LidKeeper/DisplayBrightness.swift" "$ROOT/Sources/LidKeeper/LidBrightnessController.swift" \
+    "$ROOT/Tests/AppTests/BrightnessTests.swift" -o "$BUILD/tests/brightness-tests" \
+    -framework Foundation -framework CoreGraphics -framework ColorSync -framework IOKit
+codesign --force --sign - "$BUILD/tests/brightness-tests"
+"$BUILD/tests/brightness-tests"
 
 xcrun swiftc -swift-version 5 -Onone -parse-as-library -module-cache-path "$BUILD/module-cache" \
     "$ROOT/Sources/PowerHelper/SessionCore.swift" "$ROOT/Sources/PowerHelper/SecureFiles.swift" \

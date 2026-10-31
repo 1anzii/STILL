@@ -9,8 +9,8 @@ BUILD="$ROOT/.build"
 DIST="$ROOT/dist"
 APP="$BUILD/app-stage/STILL.app"
 FINAL_APP="$DIST/STILL.app"
-VERSION="${APP_VERSION:-1.9.4}"
-BUILD_NUMBER="${APP_BUILD:-22}"
+VERSION="${APP_VERSION:-1.10.0}"
+BUILD_NUMBER="${APP_BUILD:-24}"
 IDENTITY="${SIGN_IDENTITY:--}"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 ARCHITECTURES=(arm64 x86_64)
@@ -40,7 +40,7 @@ for architecture in "${ARCHITECTURES[@]}"; do
     xcrun swiftc -swift-version 5 -O -whole-module-optimization -parse-as-library \
         -module-cache-path "$BUILD/module-cache" -sdk "$SDK" -target "$architecture-apple-macos13.0" \
         "$ROOT"/Sources/LidKeeper/*.swift -o "$BUILD/$architecture/LidKeeper" \
-        -framework AppKit -framework SwiftUI -framework Foundation -framework IOKit -framework ServiceManagement -framework Security -framework CoreText
+        -framework AppKit -framework SwiftUI -framework Foundation -framework IOKit -framework ServiceManagement -framework Security -framework CoreText -framework CoreGraphics -framework ColorSync
     xcrun swiftc -swift-version 5 -O -whole-module-optimization -parse-as-library \
         -module-cache-path "$BUILD/module-cache" -sdk "$SDK" -target "$architecture-apple-macos13.0" \
         "$ROOT"/Sources/PowerHelper/*.swift -o "$BUILD/$architecture/com.yeonza.LidKeeper.helper" \

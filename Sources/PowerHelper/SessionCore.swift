@@ -33,7 +33,7 @@ struct OwnedSession: Codable {
 
 struct HelperStatus: Codable {
     var version = 1
-    var helperVersion = "1.1.0"
+    var helperVersion = "1.1.1"
     var enabled = false
     var sessionID: String?
     var ownerUID: UInt32?

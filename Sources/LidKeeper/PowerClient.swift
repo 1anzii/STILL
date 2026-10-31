@@ -59,7 +59,7 @@ enum ClientError: LocalizedError {
 }
 
 enum PowerClient {
-    static let helperVersion = "1.1.0"
+    static let helperVersion = "1.1.1"
     static let installedHelper = "/Library/PrivilegedHelperTools/com.yeonza.LidKeeper.helper"
     static let statusURL = URL(fileURLWithPath: "/Library/Application Support/LidKeeper/status.json")
     static let ipcURL = URL(fileURLWithPath: "/var/run/LidKeeper/\(getuid())", isDirectory: true)

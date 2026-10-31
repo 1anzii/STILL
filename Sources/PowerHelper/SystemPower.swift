@@ -14,28 +14,36 @@ struct CommandFailure: Error, CustomStringConvertible {
 enum FixedCommand {
     /// Only fixed system executables are invoked. There is no shell interpreter.
     static func run(_ executable: String, _ arguments: [String], timeout: Double = 8) throws -> String {
-        guard ["/usr/bin/pmset", "/bin/launchctl"].contains(executable) else { throw HelperError.invalidRequest }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: executable)
-        task.arguments = arguments
-        task.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "HOME": "/var/root"]
-        let output = Pipe()
-        task.standardOutput = output
-        task.standardError = output
-        try task.run()
-        let until = monotonicSeconds() + timeout
-        while task.isRunning && monotonicSeconds() < until { usleep(50_000) }
-        if task.isRunning {
-            task.terminate()
-            usleep(200_000)
-            if task.isRunning { _ = kill(task.processIdentifier, SIGKILL) }
+        try autoreleasepool {
+            guard ["/usr/bin/pmset", "/bin/launchctl"].contains(executable) else { throw HelperError.invalidRequest }
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: executable)
+            task.arguments = arguments
+            task.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "HOME": "/var/root"]
+            let output = Pipe()
+            // The daemon has no application run loop to drain autoreleased
+            // FileHandles. Close both ends on every exit, including run errors.
+            defer {
+                try? output.fileHandleForReading.close()
+                try? output.fileHandleForWriting.close()
+            }
+            task.standardOutput = output
+            task.standardError = output
+            try task.run()
+            let until = monotonicSeconds() + timeout
+            while task.isRunning && monotonicSeconds() < until { usleep(50_000) }
+            if task.isRunning {
+                task.terminate()
+                usleep(200_000)
+                if task.isRunning { _ = kill(task.processIdentifier, SIGKILL) }
+                task.waitUntilExit()
+                throw HelperError.system("系统电源命令超时。")
+            }
             task.waitUntilExit()
-            throw HelperError.system("系统电源命令超时。")
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            guard task.terminationStatus == 0 else { throw CommandFailure(status: task.terminationStatus) }
+            return String(data: data, encoding: .utf8) ?? ""
         }
-        task.waitUntilExit()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        guard task.terminationStatus == 0 else { throw CommandFailure(status: task.terminationStatus) }
-        return String(data: data, encoding: .utf8) ?? ""
     }
 }
 

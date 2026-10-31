@@ -28,4 +28,4 @@ You should have received a copy of the GNU General Public License along with STI
 
 图标由 `scripts/generate-icon.swift` 绘制，结合上述纹理与 Michroma 字体字形。绘图脚本和项目自有图形部分采用项目许可；字体文件仍保留 OFL。
 
-应用依赖系统提供的 Apple 框架；这些框架不随本项目分发，也不受本项目 GPL 许可约束。
+应用依赖系统提供的 Apple 框架，包括内屏亮度控制使用的 DisplayServices 私有接口；这些框架不随本项目分发，也不受本项目 GPL 许可约束。亮度控制代码为项目自有实现，未包含第三方项目代码。

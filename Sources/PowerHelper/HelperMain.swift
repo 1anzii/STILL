@@ -180,31 +180,37 @@ struct HelperMain {
         while true {
             if stopping != 0 && controller.session == nil { return }
             do {
-                try lock.acquire(nonblocking: true)
-                defer { lock.release() }
-                if stopping != 0 {
-                    try controller.restore(reason: "service_stopped", message: "后台服务已退出，已恢复正常休眠。")
-                    return
-                }
-                let now = Date().timeIntervalSince1970
-                let monotonic = monotonicSeconds()
-                let heartbeat = controller.session.flatMap {
-                    try? readIPC(Heartbeat.self, name: "heartbeat.json", uid: $0.ownerUID)
-                }
-                try controller.tick(now: now, monotonic: monotonic, heartbeat: heartbeat)
-                for uid in configuration.allowedUIDs {
-                    guard let (request, modified) = try? readIPC(ControlRequest.self, name: "request.json", uid: uid),
-                          request.id != seen[uid] else { continue }
-                    seen[uid] = request.id
-                    // Requests older than 30 seconds are never activated.
-                    guard now - modified >= -5, now - modified <= 30 else { continue }
-                    let heartbeat = try? readIPC(Heartbeat.self, name: "heartbeat.json", uid: uid)
-                    do { try controller.process(request, uid: uid, now: now, monotonic: monotonic, heartbeat: heartbeat) }
-                    catch {
-                        try? controller.reportRequestFailure(id: request.id, error: error)
+                // Bound Foundation's temporary objects in this long-lived loop.
+                // Return a flag so stopping still exits the daemon, not just the pool.
+                let shouldStop = try autoreleasepool { () throws -> Bool in
+                    try lock.acquire(nonblocking: true)
+                    defer { lock.release() }
+                    if stopping != 0 {
+                        try controller.restore(reason: "service_stopped", message: "后台服务已退出，已恢复正常休眠。")
+                        return true
                     }
+                    let now = Date().timeIntervalSince1970
+                    let monotonic = monotonicSeconds()
+                    let heartbeat = controller.session.flatMap {
+                        try? readIPC(Heartbeat.self, name: "heartbeat.json", uid: $0.ownerUID)
+                    }
+                    try controller.tick(now: now, monotonic: monotonic, heartbeat: heartbeat)
+                    for uid in configuration.allowedUIDs {
+                        guard let (request, modified) = try? readIPC(ControlRequest.self, name: "request.json", uid: uid),
+                              request.id != seen[uid] else { continue }
+                        seen[uid] = request.id
+                        // Requests older than 30 seconds are never activated.
+                        guard now - modified >= -5, now - modified <= 30 else { continue }
+                        let heartbeat = try? readIPC(Heartbeat.self, name: "heartbeat.json", uid: uid)
+                        do { try controller.process(request, uid: uid, now: now, monotonic: monotonic, heartbeat: heartbeat) }
+                        catch {
+                            try? controller.reportRequestFailure(id: request.id, error: error)
+                        }
+                    }
+                    try controller.refreshStatus()
+                    return false
                 }
-                try controller.refreshStatus()
+                if shouldStop { return }
             } catch {
                 // Keep the durable ownership record and retry at the next tick.
                 // No terminal output path is writable by unprivileged users.
